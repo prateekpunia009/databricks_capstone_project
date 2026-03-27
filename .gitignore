@@ -24,3 +24,8 @@ venv/
 
 # Claude
 .claude/
+
+# Project folders — stored locally / uploaded to Databricks manually
+data/
+notebooks/
+app/
