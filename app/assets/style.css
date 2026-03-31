@@ -292,6 +292,15 @@ html, body {
 .toggle-btn:hover { background: var(--bg); color: var(--text); }
 .toggle-btn-active { background: var(--primary) !important; color: white !important; font-weight: 600; }
 
+/* ── Data disclaimer ─────────────────────────────────────── */
+.data-disclaimer {
+  font-size: 11px;
+  color: var(--text-3);
+  padding: 6px 0;
+  border-top: 1px solid var(--border);
+  margin-top: 6px;
+}
+
 /* ── Anomaly cards ───────────────────────────────────────── */
 .anomaly-card {
   background: white;

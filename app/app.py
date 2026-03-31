@@ -236,6 +236,14 @@ def placeholder(icon: str, text: str, subtext: str = ""):
     ], className="placeholder")
 
 
+def data_disclaimer():
+    return html.Div(
+        "Stats sourced from Cricsheet (cricsheet.org). Coverage may not include every match. "
+        "Values are consistent with official records but may differ slightly due to data availability.",
+        className="data-disclaimer"
+    )
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # PAGE 1 — PLAYER SCOUT
 # ─────────────────────────────────────────────────────────────────────────────
@@ -244,11 +252,9 @@ def page_scout():
     return html.Div([
         html.Div([
             html.Div("Player Scout", className="page-title"),
-            html.Div([
-                "Individual performance analysis with AI-powered role assessment. ",
-                html.Span("Data source: Cricsheet · All T20 formats · Coverage up to June 2024",
-                          style={"fontSize": "11px", "color": "#94a3b8", "marginLeft": "8px"}),
-            ], className="page-subtitle"),
+            html.Div("Individual performance analysis with AI-powered role assessment.",
+                     className="page-subtitle"),
+            data_disclaimer(),
         ]),
 
         # Controls
@@ -685,11 +691,9 @@ def page_anomaly():
     return html.Div([
         html.Div([
             html.Div("Anomaly Feed", className="page-title"),
-            html.Div([
-                "AI-generated insights on players whose form has deviated from their career baseline. ",
-                html.Span("Data source: Cricsheet · All T20 formats · Coverage up to June 2024",
-                          style={"fontSize": "11px", "color": "#94a3b8", "marginLeft": "8px"}),
-            ], className="page-subtitle"),
+            html.Div("AI-generated insights on players whose form has deviated from their career baseline.",
+                     className="page-subtitle"),
+            data_disclaimer(),
         ]),
 
         # Filters
@@ -879,6 +883,7 @@ def page_matchup():
             html.Div("Matchup Intel", className="page-title"),
             html.Div("Head-to-head analysis with AI tactical recommendations for team selectors.",
                      className="page-subtitle"),
+            data_disclaimer(),
         ]),
 
         html.Div([
