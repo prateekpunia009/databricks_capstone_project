@@ -143,6 +143,14 @@ def fmt(val, decimals=1, suffix="") -> str:
         return "—"
 
 
+def _safe(name) -> str:
+    """Escape single quotes in player names so they are safe to embed in SQL strings.
+    e.g. "D'Souza" → "D''Souza"  (SQL standard escaping, not a backslash)
+    This prevents both query failures and SQL injection from dropdown values.
+    """
+    return str(name).replace("'", "''")
+
+
 def delta_class(val) -> str:
     try:
         return "delta-up" if float(val) > 0 else ("delta-down" if float(val) < 0 else "delta-flat")
@@ -236,8 +244,11 @@ def page_scout():
     return html.Div([
         html.Div([
             html.Div("Player Scout", className="page-title"),
-            html.Div("Individual performance analysis with AI-powered role assessment.",
-                     className="page-subtitle"),
+            html.Div([
+                "Individual performance analysis with AI-powered role assessment. ",
+                html.Span("Data source: Cricsheet · All T20 formats · Coverage up to June 2024",
+                          style={"fontSize": "11px", "color": "#94a3b8", "marginLeft": "8px"}),
+            ], className="page-subtitle"),
         ]),
 
         # Controls
@@ -346,13 +357,14 @@ def render_scout(player, stype):
 
 
 def _render_batter(name: str):
+    safe_name = _safe(name)   # escape ' → '' to prevent SQL errors on names like D'Souza
     # Career stats — use strike_rate (true overall SR = runs/balls*100), not career_avg_sr
     df = run_q(f"""
         SELECT batter, matches, runs, balls_faced, strike_rate AS career_sr,
                rolling_avg_sr, batting_avg, dot_pct, boundary_pct,
                form_trajectory, impact_score, consistency_label
         FROM {T['bc']}
-        WHERE LOWER(batter) = LOWER('{name}')
+        WHERE LOWER(batter) = LOWER('{safe_name}')
     """)
     if df.empty:
         return placeholder("🔍", f"No data found for '{name}'",
@@ -360,9 +372,10 @@ def _render_batter(name: str):
     r = df.iloc[0]
 
     # Typical batting position + team
+    safe_batter = _safe(r['batter'])
     pos_df = run_q(f"""
         SELECT batting_position, team_batting, COUNT(*) as cnt
-        FROM {T['bm']} WHERE batter = '{r['batter']}'
+        FROM {T['bm']} WHERE batter = '{safe_batter}'
         GROUP BY batting_position, team_batting
         ORDER BY cnt DESC LIMIT 1
     """)
@@ -376,7 +389,7 @@ def _render_batter(name: str):
             SUM(CASE WHEN runs >= 50 AND runs < 100 THEN 1 ELSE 0 END) AS fifties,
             SUM(fours)                                             AS fours,
             SUM(sixes)                                             AS sixes
-        FROM {T['bm']} WHERE batter = '{r['batter']}'
+        FROM {T['bm']} WHERE batter = '{safe_batter}'
     """)
     position      = pos_df.iloc[0]["batting_position"] if not pos_df.empty else None
     team          = pos_df.iloc[0]["team_batting"]     if not pos_df.empty else "—"
@@ -394,21 +407,24 @@ def _render_batter(name: str):
     # Trend data
     trend = run_q(f"""
         SELECT match_date, runs, strike_rate, opponent
-        FROM {T['bm']} WHERE batter = '{r['batter']}'
+        FROM {T['bm']} WHERE batter = '{safe_batter}'
         ORDER BY match_date ASC
     """)
 
-    # Phase stats
+    # Phase stats — case-insensitive phase match guards against Silver table casing variations
     phase_df = run_q(f"""
         SELECT phase, strike_rate, batting_avg, dot_pct, boundary_pct, matches
-        FROM {T['bp']} WHERE batter = '{r['batter']}'
+        FROM {T['bp']} WHERE batter = '{safe_batter}'
     """)
+    # Normalise phase names so Powerplay/powerplay/POWERPLAY all map correctly
+    if not phase_df.empty:
+        phase_df["phase"] = phase_df["phase"].str.capitalize()
 
     # AI verdict
     verdict_df = run_q(f"""
         SELECT recommended_action, sr_delta, sr_zscore, anomaly_type
         FROM {T['an']}
-        WHERE LOWER(player) = LOWER('{r['batter']}') AND entity_type = 'batter'
+        WHERE LOWER(player) = LOWER('{safe_batter}') AND entity_type = 'batter'
         LIMIT 1
     """)
 
@@ -526,35 +542,41 @@ def _render_batter(name: str):
 
 
 def _render_bowler(name: str):
+    safe_name = _safe(name)   # escape ' → '' for names like D'Souza
     df = run_q(f"""
         SELECT bowler, matches, wickets, economy, bowling_avg, bowling_sr,
                dot_pct, boundary_pct_conceded, form_trajectory,
                impact_score, rolling_avg_economy, career_avg_economy,
                economy_vs_career_delta
         FROM {T['wc']}
-        WHERE LOWER(bowler) = LOWER('{name}')
+        WHERE LOWER(bowler) = LOWER('{safe_name}')
     """)
     if df.empty:
         return placeholder("🔍", f"No data found for '{name}'")
     r = df.iloc[0]
 
+    safe_bowler = _safe(r['bowler'])
     trend = run_q(f"""
         SELECT match_date, economy, wickets,
-               COALESCE(team_home, '') AS opponent
-        FROM {T['wm']} WHERE bowler = '{r['bowler']}'
+               -- opponent = whichever team is NOT the bowler's team (team_away is the batting side
+               -- when bowler's team is listed as team_home, so team_away is the opposition)
+               COALESCE(team_away, team_home, '') AS opponent
+        FROM {T['wm']} WHERE bowler = '{safe_bowler}'
         ORDER BY match_date ASC
     """)
-    trend["opponent"] = trend["opponent"]  # already string
 
+    # Normalise phase names so Powerplay/powerplay/POWERPLAY all match
     phase_df = run_q(f"""
         SELECT phase, economy, bowling_sr, dot_pct, boundary_pct_conceded, wickets, matches
-        FROM {T['wp']} WHERE bowler = '{r['bowler']}'
+        FROM {T['wp']} WHERE bowler = '{safe_bowler}'
     """)
+    if not phase_df.empty:
+        phase_df["phase"] = phase_df["phase"].str.capitalize()
 
     verdict_df = run_q(f"""
         SELECT recommended_action, sr_zscore
         FROM {T['an']}
-        WHERE LOWER(player) = LOWER('{r['bowler']}') AND entity_type = 'bowler'
+        WHERE LOWER(player) = LOWER('{safe_bowler}') AND entity_type = 'bowler'
         LIMIT 1
     """)
 
@@ -601,7 +623,9 @@ def _render_bowler(name: str):
         verdict_box = html.Div([
             html.Div("📊  BOWLING SUMMARY", className="verdict-header"),
             html.Div(f"{r['bowler']} has taken {r['wickets']} wickets in {r['matches']} matches "
-                     f"at an economy of {fmt(r['economy'])}. Form trajectory: {traj.lower()}.",
+                     f"at a career economy of {fmt(r['career_avg_economy'], 2)} "
+                     f"(current form: {fmt(r['rolling_avg_economy'], 2)}). "
+                     f"Form trajectory: {traj.lower()}.",
                      className="verdict-text"),
         ], className="verdict-box verdict-blue")
 
@@ -638,16 +662,18 @@ def _render_bowler(name: str):
                       html.Div(fmt(r["impact_score"]), className="stat-value")], className="stat-tile"),
         ], className="stat-grid", style={"marginBottom": "20px"}),
 
-        html.Div([
-            html.Div("Economy Rate — Match by Match", className="card-title"),
-            dcc.Graph(figure=fig, config={"displayModeBar": False}),
-        ], className="card", style={"marginBottom": "16px"}),
-
+        # Phase breakdown first (same order as batter page)
         html.Div("Phase Breakdown", className="section-header"),
         html.Div(phase_cards, className="stat-grid stat-grid-3",
                  style={"marginBottom": "16px"}),
 
         verdict_box,
+
+        # Trend chart at the bottom (consistent with batter page layout)
+        html.Div([
+            html.Div("Economy Rate — Match by Match", className="card-title"),
+            dcc.Graph(figure=fig, config={"displayModeBar": False}),
+        ], className="card", style={"marginTop": "16px"}),
     ])
 
 
@@ -659,8 +685,11 @@ def page_anomaly():
     return html.Div([
         html.Div([
             html.Div("Anomaly Feed", className="page-title"),
-            html.Div("AI-generated insights on players whose form has deviated from career baseline.",
-                     className="page-subtitle"),
+            html.Div([
+                "AI-generated insights on players whose form has deviated from their career baseline. ",
+                html.Span("Data source: Cricsheet · All T20 formats · Coverage up to June 2024",
+                          style={"fontSize": "11px", "color": "#94a3b8", "marginLeft": "8px"}),
+            ], className="page-subtitle"),
         ]),
 
         # Filters
@@ -911,6 +940,8 @@ def render_matchup(batter, bowler):
     if not batter or not bowler:
         return placeholder("🎯", "Select both a batter and a bowler",
                            "Minimum 6 balls required for H2H data")
+    safe_batter = _safe(batter)
+    safe_bowler = _safe(bowler)
     try:
         df = run_q(f"""
             SELECT batter, bowler, balls, runs, dismissals, matches_faced,
@@ -920,7 +951,7 @@ def render_matchup(batter, bowler):
                    ROUND(boundary_pct, 1) AS boundary_pct,
                    ROUND(dismissal_rate * 100, 1) AS dismissal_pct
             FROM {T['mu']}
-            WHERE LOWER(batter) = LOWER('{batter}') AND LOWER(bowler) = LOWER('{bowler}')
+            WHERE LOWER(batter) = LOWER('{safe_batter}') AND LOWER(bowler) = LOWER('{safe_bowler}')
         """)
 
         if df.empty:
@@ -944,7 +975,7 @@ def render_matchup(batter, bowler):
                    ROUND(dot_pct, 1)          AS dot_pct,
                    ROUND(dismissal_rate * 100, 1) AS dismissal_pct
             FROM {T['mu']}
-            WHERE LOWER(batter) = LOWER('{batter}') AND balls >= 12
+            WHERE LOWER(batter) = LOWER('{safe_batter}') AND balls >= 12
             ORDER BY dismissal_rate DESC
             LIMIT 6
         """)
@@ -957,7 +988,7 @@ def render_matchup(batter, bowler):
                     'databricks-meta-llama-3-3-70b-instruct',
                     CONCAT(
                         'You are a T20 cricket analyst. ',
-                        'Batter: {r["batter"]}. Bowler: {r["bowler"]}. ',
+                        'Batter: {_safe(r["batter"])}. Bowler: {_safe(r["bowler"])}. ',
                         'Head to head: {r["balls"]} balls, {r["runs"]} runs, ',
                         'strike rate {r["strike_rate"]}, {r["dismissals"]} dismissals, ',
                         'dot ball %: {r["dot_pct"]}%. ',
