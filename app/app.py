@@ -122,6 +122,22 @@ def run_q(q: str) -> pd.DataFrame:
                 raise exc
 
 
+# ── Stat help tooltips ────────────────────────────────────────────────────────
+
+STAT_HELP = {
+    "CAREER SR":       "Runs scored per 100 balls. In T20, 130+ is strong, 150+ is explosive.",
+    "CURRENT FORM SR": "Strike rate from the last 10 matches vs career average — shows if form is rising or falling.",
+    "BATTING AVG":     "Average runs before being dismissed. Higher = more consistent. 40+ is elite in T20.",
+    "ECONOMY":         "Runs a bowler concedes per over (6 balls). Below 7.0 is excellent. Above 9.0 is expensive.",
+    "BOWLING SR":      "Balls needed per wicket. Lower = strikes more often. Below 15 is elite.",
+    "DOT BALL %":      "Percentage of balls where zero runs are scored. High dot % = building pressure on the batter.",
+    "BOUNDARY %":      "How often the batter hits a 4 or 6. Higher = more aggressive batting.",
+    "IMPACT SCORE":    "Composite score combining SR, average, boundary rate, and form. Max 99. Above 70 = elite.",
+    "DISMISSAL RATE":  "Probability of being dismissed on any given ball. Lower is better for the batter.",
+    "BOWLING AVG":     "Runs conceded per wicket taken. Lower = more economical dismissals.",
+}
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def position_to_role(pos) -> str:
@@ -192,13 +208,22 @@ def make_trend_fig(df: pd.DataFrame, y_col: str, baseline: float,
                   annotation_text=f"Career avg  {fmt(baseline)}",
                   annotation_font_color="#94a3b8", annotation_font_size=10)
 
+    # Green band: above baseline + 15 (hot form zone)
+    if baseline > 0:
+        fig.add_hrect(y0=baseline + 15, y1=baseline + 200,
+                      fillcolor="rgba(16,185,129,0.05)", line_width=0)
+        # Red band: below baseline - 15 (slump zone)
+        fig.add_hrect(y0=max(0, baseline - 200), y1=baseline - 15,
+                      fillcolor="rgba(239,68,68,0.05)", line_width=0)
+
     fig.update_layout(
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(family="Inter, sans-serif", size=12, color="#0f172a"),
+        font=dict(family="Inter, sans-serif", size=12, color="#8b949e"),
         height=240,
         margin=dict(l=4, r=4, t=12, b=4),
-        xaxis=dict(showgrid=False, color="#94a3b8", tickfont=dict(size=10)),
-        yaxis=dict(showgrid=True, gridcolor="#f1f5f9", color="#94a3b8", tickfont=dict(size=10)),
+        xaxis=dict(showgrid=False, color="#8b949e", tickfont=dict(size=10, color="#8b949e")),
+        yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)",
+                   color="#8b949e", tickfont=dict(size=10, color="#8b949e")),
         legend=dict(orientation="h", x=0, y=1.1, font=dict(size=10),
                     bgcolor="rgba(0,0,0,0)"),
         hovermode="x unified",
@@ -210,12 +235,12 @@ def make_trend_fig(df: pd.DataFrame, y_col: str, baseline: float,
 
 def navbar(active: str = "/"):
     links = [("/", "🏏 Player Scout"),
-             ("/anomaly", "⚡ Anomaly Feed"),
+             ("/anomaly", "⚡ Hot Signals"),
              ("/matchup", "🎯 Matchup Intel")]
     return html.Div([
         html.Div([
             html.Span("🏏", style={"fontSize": "20px"}),
-            html.Span("Cricket", style={"color": "#1d4ed8", "fontWeight": "800"}),
+            html.Span("Cricket", style={"color": "var(--primary)", "fontWeight": "800"}),
             html.Span(" Intelligence", style={"fontWeight": "700"}),
         ], className="navbar-brand"),
         html.Nav([
@@ -244,6 +269,41 @@ def data_disclaimer():
     )
 
 
+def stat_label_with_help(label: str) -> html.Div:
+    tip = STAT_HELP.get(label, "")
+    if not tip:
+        return html.Div(label, className="stat-label")
+    return html.Div([
+        html.Span(label),
+        html.Span("ⓘ", className="stat-info-icon"),
+        html.Div(tip, className="stat-tooltip-text"),
+    ], className="stat-label stat-tooltip-wrapper")
+
+
+def glossary_panel():
+    terms = [
+        ("Strike Rate", "Runs per 100 balls. 130+ is good in T20."),
+        ("Economy",     "Runs a bowler gives per over. Lower is better."),
+        ("Dot Ball",    "A ball where the batter scores zero."),
+        ("Powerplay",   "Overs 1–6. Only 2 fielders allowed outside the circle."),
+        ("Death Overs", "Overs 16–20. Maximum aggression batting phase."),
+        ("Average",     "Runs per dismissal. Higher = more consistent."),
+        ("Bowling SR",  "Balls needed per wicket. Lower = more dangerous."),
+    ]
+    rows = [html.Tr([
+        html.Td(t, style={"fontWeight": "600", "paddingRight": "16px", "paddingBottom": "6px",
+                           "color": "var(--text)", "fontSize": "13px", "whiteSpace": "nowrap"}),
+        html.Td(d, style={"color": "var(--text-2)", "fontSize": "13px"}),
+    ]) for t, d in terms]
+    return html.Details([
+        html.Summary("📖 New to cricket? Open the glossary",
+                     style={"cursor": "pointer", "fontSize": "12px",
+                            "color": "var(--text-2)", "fontWeight": "600", "padding": "10px 0"}),
+        html.Table(html.Tbody(rows),
+                   style={"marginTop": "10px", "borderCollapse": "collapse"}),
+    ], style={"borderTop": "1px solid var(--border)", "marginTop": "24px", "paddingTop": "4px"})
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # PAGE 1 — PLAYER SCOUT
 # ─────────────────────────────────────────────────────────────────────────────
@@ -252,7 +312,7 @@ def page_scout():
     return html.Div([
         html.Div([
             html.Div("Player Scout", className="page-title"),
-            html.Div("Individual performance analysis with AI-powered role assessment.",
+            html.Div("Look up any T20 player — see their career stats, current form, and what the AI recommends.",
                      className="page-subtitle"),
             data_disclaimer(),
         ]),
@@ -278,11 +338,13 @@ def page_scout():
 
         dcc.Store(id="scout-type", data="bat"),
 
-        dcc.Loading(type="circle", color="#1d4ed8",
+        dcc.Loading(type="circle", color="var(--primary)",
                     children=html.Div(id="scout-content",
                                       children=placeholder("🏏",
                                           "Select a player above to load their story",
                                           "Choose BAT or BOWL, then pick a name"))),
+
+        glossary_panel(),
     ], className="page-wrapper")
 
 
@@ -446,6 +508,11 @@ def _render_batter(name: str):
     fig = make_trend_fig(trend, "strike_rate", career_sr, "#1d4ed8", "Strike Rate")
 
     # Phase cards
+    phase_sublabels = {
+        "Powerplay": "Overs 1–6 · Fielding restrictions",
+        "Middle":    "Overs 7–15 · Build and accelerate",
+        "Death":     "Overs 16–20 · Maximum aggression",
+    }
     phase_cards = []
     for phase, cls in [("Powerplay","phase-card-pp"), ("Middle","phase-card-mid"), ("Death","phase-card-death")]:
         ph = phase_df[phase_df["phase"] == phase]
@@ -453,6 +520,7 @@ def _render_batter(name: str):
             p = ph.iloc[0]
             phase_cards.append(html.Div([
                 html.Div(phase.upper(), className="phase-label"),
+                html.Div(phase_sublabels[phase], className="phase-sublabel"),
                 html.Div([
                     html.Div([
                         html.Div(fmt(p["strike_rate"]), className="phase-stat-val"),
@@ -475,7 +543,8 @@ def _render_batter(name: str):
         else:
             phase_cards.append(html.Div([
                 html.Div(phase.upper(), className="phase-label"),
-                html.Div("No data", style={"color": "#94a3b8", "fontSize": "12px"}),
+                html.Div(phase_sublabels[phase], className="phase-sublabel"),
+                html.Div("No data", style={"color": "var(--text-3)", "fontSize": "12px"}),
             ], className=f"phase-card {cls}"))
 
     # AI verdict box
@@ -513,17 +582,17 @@ def _render_batter(name: str):
                       html.Div(str(r["matches"]),  className="stat-value"),], className="stat-tile"),
             html.Div([html.Div("RUNS",       className="stat-label"),
                       html.Div(str(r["runs"]),     className="stat-value"),], className="stat-tile"),
-            html.Div([html.Div("CAREER SR",  className="stat-label"),
+            html.Div([stat_label_with_help("CAREER SR"),
                       html.Div(fmt(career_sr), className="stat-value"),], className="stat-tile"),
-            html.Div([html.Div("CURRENT FORM SR", className="stat-label"),
+            html.Div([stat_label_with_help("CURRENT FORM SR"),
                       html.Div([
                           html.Span(fmt(rolling_sr), className="stat-value"),
                           html.Span(f"  {delta_sign}{fmt(delta)}", className=delta_cls,
                                     style={"fontSize": "14px", "marginLeft": "6px"}),
                       ]),], className="stat-tile"),
-            html.Div([html.Div("AVERAGE",    className="stat-label"),
+            html.Div([stat_label_with_help("BATTING AVG"),
                       html.Div(fmt(r["batting_avg"]), className="stat-value"),], className="stat-tile"),
-            html.Div([html.Div("IMPACT SCORE", className="stat-label"),
+            html.Div([stat_label_with_help("IMPACT SCORE"),
                       html.Div(fmt(r["impact_score"]), className="stat-value"),], className="stat-tile"),
             html.Div([html.Div("HIGHEST SCORE", className="stat-label"),
                       html.Div(str(highest_score), className="stat-value"),], className="stat-tile"),
@@ -594,6 +663,11 @@ def _render_bowler(name: str):
     baseline = float(r["career_avg_economy"] or 0)
     fig = make_trend_fig(trend, "economy", baseline, "#7c3aed", "Economy")
 
+    phase_sublabels_b = {
+        "Powerplay": "Overs 1–6 · Fielding restrictions",
+        "Middle":    "Overs 7–15 · Build and accelerate",
+        "Death":     "Overs 16–20 · Maximum aggression",
+    }
     phase_cards = []
     for phase, cls in [("Powerplay","phase-card-pp"), ("Middle","phase-card-mid"), ("Death","phase-card-death")]:
         ph = phase_df[phase_df["phase"] == phase]
@@ -601,6 +675,7 @@ def _render_bowler(name: str):
             p = ph.iloc[0]
             phase_cards.append(html.Div([
                 html.Div(phase.upper(), className="phase-label"),
+                html.Div(phase_sublabels_b[phase], className="phase-sublabel"),
                 html.Div([
                     html.Div([html.Div(fmt(p["economy"]),   className="phase-stat-val"),
                               html.Div("Economy",           className="phase-stat-lbl")], className="phase-stat-item"),
@@ -615,7 +690,8 @@ def _render_bowler(name: str):
         else:
             phase_cards.append(html.Div([
                 html.Div(phase.upper(), className="phase-label"),
-                html.Div("No data", style={"color": "#94a3b8", "fontSize": "12px"}),
+                html.Div(phase_sublabels_b[phase], className="phase-sublabel"),
+                html.Div("No data", style={"color": "var(--text-3)", "fontSize": "12px"}),
             ], className=f"phase-card {cls}"))
 
     if not verdict_df.empty:
@@ -649,8 +725,8 @@ def _render_bowler(name: str):
                       html.Div(str(r["matches"]), className="stat-value")], className="stat-tile"),
             html.Div([html.Div("WICKETS",   className="stat-label"),
                       html.Div(str(r["wickets"]), className="stat-value",
-                               style={"color": "#7c3aed"})], className="stat-tile"),
-            html.Div([html.Div("ECONOMY",   className="stat-label"),
+                               style={"color": "var(--accent)"})], className="stat-tile"),
+            html.Div([stat_label_with_help("ECONOMY"),
                       html.Div(fmt(r["economy"], 2), className="stat-value")], className="stat-tile"),
             html.Div([html.Div("CURRENT FORM ECO", className="stat-label"),
                       html.Div([
@@ -658,13 +734,13 @@ def _render_bowler(name: str):
                           html.Span(f"  {delta_sign}{fmt(delta, 2)}", className=delta_cls2,
                                     style={"fontSize": "14px", "marginLeft": "6px"}),
                       ])], className="stat-tile"),
-            html.Div([html.Div("BOWLING AVG", className="stat-label"),
+            html.Div([stat_label_with_help("BOWLING AVG"),
                       html.Div(fmt(r["bowling_avg"]), className="stat-value")], className="stat-tile"),
-            html.Div([html.Div("BOWLING SR",  className="stat-label"),
+            html.Div([stat_label_with_help("BOWLING SR"),
                       html.Div(fmt(r["bowling_sr"]), className="stat-value")], className="stat-tile"),
-            html.Div([html.Div("DOT BALL %",  className="stat-label"),
+            html.Div([stat_label_with_help("DOT BALL %"),
                       html.Div(fmt(r["dot_pct"]) + "%", className="stat-value")], className="stat-tile"),
-            html.Div([html.Div("IMPACT SCORE", className="stat-label"),
+            html.Div([stat_label_with_help("IMPACT SCORE"),
                       html.Div(fmt(r["impact_score"]), className="stat-value")], className="stat-tile"),
         ], className="stat-grid", style={"marginBottom": "20px"}),
 
@@ -690,8 +766,8 @@ def _render_bowler(name: str):
 def page_anomaly():
     return html.Div([
         html.Div([
-            html.Div("Anomaly Feed", className="page-title"),
-            html.Div("AI-generated insights on players whose form has deviated from their career baseline.",
+            html.Div("Hot Signals", className="page-title"),
+            html.Div("Players whose recent form is unusually different from their career average — great for IPL Fantasy picks.",
                      className="page-subtitle"),
             data_disclaimer(),
         ]),
@@ -724,7 +800,7 @@ def page_anomaly():
                               style={"fontWeight": "700", "color": "#1d4ed8", "fontSize": "13px"}),
                 ]),
                 dcc.Slider(id="an-threshold", min=0.2, max=1.2, step=0.1, value=0.5,
-                           marks={0.2: "0.2", 0.5: "0.5", 0.8: "0.8", 1.0: "1.0", 1.2: "1.2"},
+                           marks={0.2: "Subtle", 0.5: "Notable", 0.8: "Strong", 1.2: "Extreme"},
                            tooltip={"always_visible": False}),
             ], className="control-group", style={"minWidth": "280px"}),
         ], className="controls-bar"),
@@ -732,8 +808,10 @@ def page_anomaly():
         dcc.Store(id="an-signal", data="ALL"),
         dcc.Store(id="an-etype",  data="ALL"),
 
-        dcc.Loading(type="circle", color="#1d4ed8",
+        dcc.Loading(type="circle", color="var(--primary)",
                     children=html.Div(id="anomaly-content")),
+
+        glossary_panel(),
     ], className="page-wrapper")
 
 
@@ -826,6 +904,7 @@ def render_anomaly(signal, etype, threshold):
         metric_label = "STRIKE RATE" if r["entity_type"] == "batter" else "ECONOMY"
         atype    = str(r["anomaly_type"]).replace("_", " ").title()
 
+        card_variant = "anomaly-card anomaly-card-hot" if is_hot else "anomaly-card anomaly-card-slump"
         cards.append(
             dbc.Col(html.Div([
                 # Header
@@ -841,7 +920,7 @@ def render_anomaly(signal, etype, threshold):
                     html.Div([
                         html.Div(f"{'+' if is_hot else ''}{pct}%" if abs(pct) > 2 else f"{abs(zscore):.1f}σ",
                                  className=d_cls),
-                        html.Div(metric_label, style={"fontSize": "10px", "color": "#94a3b8",
+                        html.Div(metric_label, style={"fontSize": "10px", "color": "var(--text-3)",
                                                        "textAlign": "right", "marginTop": "2px"}),
                     ], style={"textAlign": "right"}),
                 ], style={"display": "flex", "justifyContent": "space-between",
@@ -867,7 +946,7 @@ def render_anomaly(signal, etype, threshold):
                 # AI recommendation
                 html.Div(str(r["recommended_action"]) if r.get("recommended_action") else "—",
                          className="anomaly-action"),
-            ], className="anomaly-card"), width=12, md=6, style={"marginBottom": "12px"})
+            ], className=card_variant), width=12, md=6, style={"marginBottom": "12px"})
         )
 
     return dbc.Row(cards)
@@ -881,7 +960,7 @@ def page_matchup():
     return html.Div([
         html.Div([
             html.Div("Matchup Intel", className="page-title"),
-            html.Div("Head-to-head analysis with AI tactical recommendations for team selectors.",
+            html.Div("Pick a batter and a bowler to see their head-to-head battle — who usually wins, and why.",
                      className="page-subtitle"),
             data_disclaimer(),
         ]),
@@ -906,11 +985,13 @@ def page_matchup():
             ], className="control-group"),
         ], className="controls-bar"),
 
-        dcc.Loading(type="circle", color="#1d4ed8",
+        dcc.Loading(type="circle", color="var(--primary)",
                     children=html.Div(id="matchup-content",
                                       children=placeholder("🎯",
                                           "Select both a batter and a bowler",
                                           "Minimum 6 balls required for H2H data"))),
+
+        glossary_panel(),
     ], className="page-wrapper")
 
 
@@ -970,8 +1051,8 @@ def render_matchup(batter, bowler):
 
         is_batter_adv = sr > 120
         adv_label = "BATTER ADVANTAGE" if is_batter_adv else "BOWLER ADVANTAGE"
-        adv_color = "#16a34a"            if is_batter_adv else "#dc2626"
-        adv_bg    = "#dcfce7"            if is_batter_adv else "#fee2e2"
+        adv_color = "var(--green)" if is_batter_adv else "var(--red)"
+        adv_bg    = "var(--green-dim)" if is_batter_adv else "var(--red-dim)"
 
         # Dangermen: best bowlers vs this batter
         danger_df = run_q(f"""
@@ -1028,31 +1109,45 @@ def render_matchup(batter, bowler):
                 html.Td(f"#{rank}", style={"color": "#94a3b8", "fontWeight": "600"}),
                 html.Td([
                     html.Span(d["bowler"]),
-                    html.Span(" ← current", style={"color": "#1d4ed8", "fontSize": "11px",
+                    html.Span(" ← current", style={"color": "var(--primary)", "fontSize": "11px",
                                                     "marginLeft": "6px"}) if is_current else None,
                 ]),
                 html.Td(str(d["balls"])),
                 html.Td(str(d["sr"])),
                 html.Td(f"{d['dot_pct']}%"),
                 html.Td(f"{d['dismissal_pct']}%",
-                        style={"color": "#dc2626" if d["dismissal_pct"] > 10 else "#0f172a",
+                        style={"color": "var(--red)" if d["dismissal_pct"] > 10 else "var(--text)",
                                "fontWeight": "700" if d["dismissal_pct"] > 10 else "400"}),
             ]))
 
         return html.Div([
-            # Header
+            # Fight-poster header
             html.Div([
-                html.Div(r["batter"], className="matchup-player",
-                         style={"color": "#1d4ed8"}),
-                html.Span("vs", style={"color": "#94a3b8", "fontWeight": "500",
-                                       "fontSize": "14px", "margin": "0 8px"}),
-                html.Div(r["bowler"], className="matchup-player",
-                         style={"color": "#7c3aed"}),
-                html.Span(adv_label, className="badge",
-                          style={"background": adv_bg, "color": adv_color,
-                                 "fontSize": "11px", "fontWeight": "700",
-                                 "marginLeft": "12px"}),
-            ], className="matchup-header"),
+                html.Div([
+                    html.Div(r["batter"], className="matchup-player-batter"),
+                    html.Div("BATTER", style={"fontSize": "10px", "color": "var(--text-3)",
+                                              "fontWeight": "700", "letterSpacing": "1px",
+                                              "marginTop": "4px"}),
+                ], style={"flex": "1", "textAlign": "right"}),
+                html.Div([
+                    html.Div("VS", className="vs-badge"),
+                    html.Div(
+                        html.Span(adv_label,
+                                  style={"fontSize": "10px", "fontWeight": "700",
+                                         "color": adv_color, "textAlign": "center",
+                                         "display": "block", "marginTop": "6px",
+                                         "whiteSpace": "nowrap"}),
+                    ),
+                ], style={"display": "flex", "flexDirection": "column", "alignItems": "center",
+                           "padding": "0 20px", "flexShrink": "0"}),
+                html.Div([
+                    html.Div(r["bowler"], className="matchup-player-bowler"),
+                    html.Div("BOWLER", style={"fontSize": "10px", "color": "var(--text-3)",
+                                              "fontWeight": "700", "letterSpacing": "1px",
+                                              "marginTop": "4px"}),
+                ], style={"flex": "1", "textAlign": "left"}),
+            ], className="matchup-header",
+               style={"display": "flex", "alignItems": "center", "justifyContent": "center"}),
 
             # H2H Stats
             html.Div([
@@ -1060,19 +1155,19 @@ def render_matchup(batter, bowler):
                           html.Div(str(r["balls"]),        className="stat-value")], className="stat-tile"),
                 html.Div([html.Div("RUNS SCORED",   className="stat-label"),
                           html.Div(str(r["runs"]),         className="stat-value",
-                                   style={"color": "#16a34a" if is_batter_adv else "#0f172a"})], className="stat-tile"),
-                html.Div([html.Div("STRIKE RATE",   className="stat-label"),
+                                   style={"color": "var(--green)" if is_batter_adv else "var(--text)"})], className="stat-tile"),
+                html.Div([stat_label_with_help("CAREER SR"),
                           html.Div(str(r["strike_rate"]),  className="stat-value")], className="stat-tile"),
                 html.Div([html.Div("DISMISSALS",    className="stat-label"),
                           html.Div(str(r["dismissals"]),   className="stat-value",
-                                   style={"color": "#dc2626"})], className="stat-tile"),
-                html.Div([html.Div("DOT BALL %",    className="stat-label"),
+                                   style={"color": "var(--red)"})], className="stat-tile"),
+                html.Div([stat_label_with_help("DOT BALL %"),
                           html.Div(f"{r['dot_pct']}%",     className="stat-value")], className="stat-tile"),
-                html.Div([html.Div("BOUNDARY %",    className="stat-label"),
+                html.Div([stat_label_with_help("BOUNDARY %"),
                           html.Div(f"{r['boundary_pct']}%", className="stat-value")], className="stat-tile"),
-                html.Div([html.Div("DISMISSAL RATE", className="stat-label"),
+                html.Div([stat_label_with_help("DISMISSAL RATE"),
                           html.Div(f"{r['dismissal_pct']}%", className="stat-value",
-                                   style={"color": "#dc2626" if drate > 10 else "#0f172a"})], className="stat-tile"),
+                                   style={"color": "var(--red)" if drate > 10 else "var(--text)"})], className="stat-tile"),
                 html.Div([html.Div("MATCHES FACED", className="stat-label"),
                           html.Div(str(r["matches_faced"]), className="stat-value")], className="stat-tile"),
             ], className="stat-grid", style={"marginBottom": "20px"}),
