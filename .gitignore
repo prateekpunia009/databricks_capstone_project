@@ -25,6 +25,9 @@ venv/
 # Claude
 .claude/
 
-# Project folders — imported directly into Databricks workspace
-notebooks/
-app/
+# Raw data files (large — loaded from Unity Catalog Volume at runtime)
+data/
+
+# App secrets — never commit real credentials
+app/.env
+.streamlit/secrets.toml
