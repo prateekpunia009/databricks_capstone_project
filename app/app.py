@@ -60,6 +60,12 @@ app = Dash(
 server = app.server
 
 # ── Auth + Connection ─────────────────────────────────────────────────────────
+#
+# AUTO-DETECT mode:
+#   - If DATABRICKS_TOKEN / CLI / SDK auth is available  → live SQL warehouse
+#   - If DATA_DIR (app/data/) has CSVs and no token      → static CSV mode
+#     Set USE_STATIC_DATA=1 env var to force static mode.
+# ─────────────────────────────────────────────────────────────────────────────
 
 _lock = threading.Lock()
 _conn = None
@@ -106,7 +112,22 @@ def get_conn():
         return _conn
 
 
+def _use_static() -> bool:
+    """Return True when the app should read from local CSV files."""
+    if os.environ.get("USE_STATIC_DATA", "").strip() == "1":
+        return True
+    data_dir = os.path.join(os.path.dirname(__file__), "data")
+    has_csvs = os.path.isdir(data_dir) and any(
+        f.endswith(".csv") for f in os.listdir(data_dir)
+    )
+    has_token = bool(_get_token())
+    return has_csvs and not has_token
+
+
 def run_q(q: str) -> pd.DataFrame:
+    if _use_static():
+        from data_loader import run_q_static
+        return run_q_static(q)
     global _conn
     for attempt in range(2):
         try:

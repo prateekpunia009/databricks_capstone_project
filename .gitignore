@@ -27,6 +27,9 @@ venv/
 
 # Raw data files (large — loaded from Unity Catalog Volume at runtime)
 data/
+# Static CSV exports for offline/Render hosting (keep .gitkeep, ignore CSVs)
+app/data/*.csv
+!app/data/.gitkeep
 
 # App secrets — never commit real credentials
 app/.env

@@ -6,3 +6,4 @@ plotly>=5.18.0
 pandas>=2.0.0
 python-dotenv>=1.0.0
 gunicorn>=21.2.0
+# sqlite3 is part of Python stdlib — no install needed for static CSV mode
